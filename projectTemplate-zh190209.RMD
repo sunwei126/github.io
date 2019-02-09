@@ -1,0 +1,959 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+PaipaiLoan by SUN, WEI
+========================================================
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+# 加载你最终使用的所有组件
+# 在这个代码块的分析中。
+
+# 注意，在这个代码块中，将参数 "echo" 设为假。
+# This prevents the code from displaying in the knitted HTML output.这可以避免代码混入 HTML 输出显示。
+# 应当在文件中，对所有代码块设为 echo=FALSE 。
+#Sys.setlocale(category = "LC_ALL",locale = "English")
+library(ggplot2)
+library(gridExtra)
+library(dplyr)
+library(GGally)
+library(sqldf)
+#Sys.getlocale()
+#Sys.setlocale("LC_ALL", "English")
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Load_the_Data}
+# 加载数据
+Sys.setlocale(category = "LC_ALL",locale = "chinese")
+getwd()
+setwd('C:/Users/sunwe/Desktop/EDA_SAMPLE/lesson2')
+df.lc <- read.csv('LC.csv', sep = ',', fileEncoding = 'UTF-8')
+df.lp <- read.csv('LP.csv', sep = ',', fileEncoding = 'UTF-8')
+#df.lcis <- read.csv('LCIS.csv', sep = ',', fileEncoding = 'UTF-8')
+```
+```{r echo=FALSE, message=FALSE, warning=FALSE, warangle_the_data(df.lc)}
+#Sys.setlocale(category = "LC_ALL",locale = "chinese")
+df.lc$ListingId <- as.character(df.lc$ListingId)
+df.lc$借款金额 <- as.numeric(df.lc$借款金额)
+df.lc$借款成功日期 <- as.Date(df.lc$借款成功日期)
+str(df.lc)
+```
+```{r echo=FALSE, message=FALSE, warning=FALSE, warangle_the_data(df.lp)}
+df.lp$ListingId <- as.character(df.lp$ListingId)
+df.lp$到期日期 <- as.Date(df.lp$到期日期)
+df.lp$还款日期 <- as.Date(df.lp$还款日期)
+df.lp$recorddate <- as.Date(df.lp$recorddate)
+str(df.lp)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+###将认证情况进行转化和合并
+df.lc$mobile <- ifelse(df.lc$手机认证 == '成功认证',1,0)
+df.lc$house <-ifelse(df.lc$户口认证 == '成功认证',1,0)
+df.lc$vedio <- ifelse(df.lc$视频认证 == '成功认证',1,0)
+df.lc$diploma <- ifelse(df.lc$学历认证 == '成功认证',1,0)
+df.lc$credit <- ifelse(df.lc$征信认证 == '成功认证',1,0)
+df.lc$taobao <- ifelse(df.lc$淘宝认证 == '成功认证',1,0)
+
+df.lc <- transform(df.lc, all.auth = mobile + house + vedio
+                + diploma + credit + taobao)
+
+list_groups <- group_by(df.lp, ListingId)
+df.lclp_by_list <- summarise(list_groups,
+          periods= max(期数),
+          repay_principle = sum(应还本金),
+          repay_interest = sum(应还利息),
+          residual_principle = sum(剩余本金),
+          residual_interest = sum(剩余利息))
+
+df.lctrack <- merge(df.lc, df.lclp_by_list, all=FALSE)
+str(df.lctrack)
+```
+
+第一部分：单变项分析
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+options(scipen= 200)
+qplot(data = df.lc, x =借款金额, fill = I('#F79420'))+
+  xlim(0, quantile(df.lc$借款金额, 0.99))+
+  scale_x_log10()
+summary(df.lc$借款金额)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+# 100    2033    3397    4424    5230  500000 
+```
+
+单变项分析：1）超过50%的贷款在2000元-5000元的区间内，最低100元/单，最高50万元/单。
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(x= 借款期限, data = df.lc, fill = I('#FFFF00'))+
+  scale_x_continuous(breaks = seq(0,30,1))
+summary(df.lc$借款期限)
+ # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+# 1.00    6.00   12.00   10.21   12.00   24.00 
+```
+
+单变项分析：2）贷款期数主要集中在6个月和12个月，其它期数的分布较少，最短1个月，最长12个月
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(x= 借款利率, data = df.lc, fill = I('#87CEFF'))+
+  scale_x_continuous(limits = c(10,25),breaks = seq(10,25,1))
+summary(df.lc$借款利率)
+#  Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+#  6.5    20.0    20.0    20.6    22.0    24.0 
+```
+
+单变项分析：3）75%的贷款利率在年化20%及以上（主要为18%、20%和22%），最低6.5%，最高24%
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(x= 借款成功日期, data = df.lc, fill = I('#FF0000'))+
+  scale_y_continuous(limits = c(0,32000),breaks = seq(0,32000,5000))
+summary(df.lc$借款成功日期)
+#Min.      1st Qu.       Median         Mean      3rd Qu.         Max. 
+#"2015-01-01" "2016-05-08" "2016-09-11" "2016-08-05" "2016-12-01" "2017-01-30" 
+```
+
+单变项分析：4）2015年1月1日至2017年1月30日，成功标量快速提高，最高3200单左右/天
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+rank_groups <- group_by(df.lc, 初始评级)
+df.lc_by_rank <- summarise(rank_groups,
+          amount_mean = mean(借款金额),
+          amount_median = median(借款金额),
+          n = n())
+
+qplot(x= 初始评级, y= n/1000, data = df.lc_by_rank)+
+  geom_bar(stat = 'identity')+
+  scale_y_continuous(limits = c(0,150), breaks = seq(0,150,10))
+
+df.lc_by_rank
+``` 
+
+单变项分析：5）初始评级为C和D的标占总体为81.13%
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+category_groups <- group_by(df.lc, 借款类型)
+df.lc_by_category <- summarise(category_groups,
+          amount_mean = mean(借款金额),
+          amount_median = median(借款金额),
+          n = n())
+
+qplot(x= 借款类型, y= n/1000, data = df.lc_by_category)+
+  geom_bar(stat = 'identity')+
+  scale_y_continuous(limits = c(0,150), breaks = seq(0,150,10))
+
+df.lc_by_category
+```
+
+单变项分析：6）普通、APP闪电和其它贷款的占比为：35.95%、34.11%和29.61%
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Univariate_Plots}
+qplot(data = df.lc, x = 是否首标 )
+summary(df.lc$是否首标)
+```
+
+单变项分析：7）非首标占比总体73.38%, 非首标是首标的2.76倍，即大多数情况下为老客户
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+qplot(data = df.lc, x = 年龄, fill = I('#2E8B57'))+
+  scale_x_continuous(limits = c(15,60), breaks = seq(10,60,5))
+summary(df.lc$年龄)
+#  Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+# 17.00   24.00   28.00   29.14   33.00   56.00 
+```
+
+单变项分析：8）17-33岁的借款数占比总体75%，最大年龄借款为56岁
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(x= 性别, data = df.lc)
+  
+summary(df.lc$性别)
+#    男     女 
+#221946 106607 
+```
+
+单变项分析：9）标的男女比例为2：1
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+lc_phone<-ggplot(aes(x=手机认证),data=df.lc)+geom_bar()+
+   scale_y_continuous(limits = c(0,350000), breaks = seq(0,350000,50000))
+lc_account<-ggplot(aes(x=户口认证),data=df.lc)+geom_bar()+
+  scale_y_continuous(limits = c(0,350000), breaks = seq(0,350000,50000))
+lc_vedio<-ggplot(aes(x=视频认证),data=df.lc)+geom_bar()+
+  scale_y_continuous(limits = c(0,350000), breaks = seq(0,350000,50000))
+lc_education<-ggplot(aes(x=学历认证),data=df.lc)+geom_bar()+
+  scale_y_continuous(limits = c(0,350000), breaks = seq(0,350000,50000))
+lc_credit<-ggplot(aes(x=征信认证),data=df.lc)+geom_bar()+
+  scale_y_continuous(limits = c(0,350000), breaks = seq(0,350000,50000))
+lc_taobao<-ggplot(aes(x=淘宝认证),data=df.lc)+geom_bar()+
+  scale_y_continuous(limits = c(0,350000), breaks = seq(0,350000,50000))
+grid.arrange(lc_phone,lc_account,lc_vedio,lc_education,
+             lc_credit,lc_taobao,ncol=3)
+
+
+```
+
+单变项分析：10）手机认证和学历认证的覆盖面明显高于其它认证渠道
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(x= 历史成功借款次数, data = df.lc)+
+xlim(0, quantile(df.lc$历史成功借款次数, 0.99))+
+  scale_x_continuous(limits = c(-1,13), breaks = seq(-1,13,1))
+
+summary(df.lc$历史成功借款次数)
+ # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+# 0.000   0.000   2.000   2.323   3.000 649.000 
+  
+```
+
+单变项分析：11）75%的标的顾客有至少1次成功借款经历
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(x= 历史成功借款金额, data = df.lc)+
+xlim(0, quantile(df.lc$历史成功借款金额, 0.99))+
+  scale_y_continuous(limits = c(0,35000), breaks = seq(0,35000,5000))+
+  scale_x_log10()
+summary(subset(df.lc$历史成功借款金额,df.lc$历史成功借款金额 >0))
+#all_loans
+#Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+#0       0    5000    8786   10355 7405926    
+#loans whose historical amount is greater than 0
+#Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+#100    4000    7473   11973   13082 7405926 
+
+```
+
+单变项分析:12）凡有历史成功借款金额平均金额为11,973元，中位数（金额）为7473元
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df.lctrack$status <-ifelse(df.lctrack$residual_principle>0,'已逾期','正常还款')
+lctrack_status <-ggplot(aes(x= status),data=df.lctrack)+geom_bar()+
+   scale_y_continuous(limits = c(0,250000), breaks = seq(0,250000,50000))
+
+lctrack_status
+
+status_groups <- group_by(df.lctrack, status)
+df.lc_by_status <- summarise(status_groups,
+          n = n(),
+          percent_n= n()/328553)
+df.lc_by_status
+```
+
+单变项分析：13）期间在所有的贷款中，71%存在不同程度的预期，29%正常还款
+
+# 单变量分析
+
+### 你的数据集结构是什么？
+将拍拍贷的LC和LP（按照ListingID汇总）进行合并，基本结构如下：
+'data.frame':	328553 obs. of  26 variables:
+ $ ListingId         : chr  "10000021" "10000081" "10000101" "10000181" ...
+ 
+ $ 借款金额          : num  2390 2000 7500 2093 3500 ...
+ 
+ $ 借款期限          : int  6 12 12 12 12 12 12 12 6 12 ...
+ 
+ $ 借款利率          : num  20 22 20 22 24 22 22 22 20 22 ...
+ 
+ $ 借款成功日期      : Date, format: "2016-03-23" "2016-03-23" "2016-03-26" ...
+ 
+ $ 初始评级          : Factor w/ 6 levels "A","B","C","D",..: 3 4 3 4 5 4 4 4 3 4 ...
+ 
+ $ 借款类型          : Factor w/ 4 levels "APP闪电","电商",..: 3 4 3 3 3 1 4 3 1 4 ...
+ 
+ $ 是否首标          : Factor w/ 2 levels "否","是": 1 1 2 1 2 2 1 1 1 1 ...
+ 
+ $ 年龄              : int  23 30 27 26 32 27 43 23 20 37 ...
+ 
+ $ 性别              : Factor w/ 2 levels "男","女": 1 1 2 2 2 2 1 1 1 1 ...
+ 
+ $ 手机认证          : Factor w/ 2 levels "成功认证","未成功认证": 1 1 1 1 1 2 1 1 2 2 ...
+ 
+ $ 户口认证          : Factor w/ 2 levels "成功认证","未成功认证": 2 2 2 2 2 2 2 2 2 2 ...
+ 
+ $ 视频认证          : Factor w/ 2 levels "成功认证","未成功认证": 2 2 2 2 2 2 2 2 2 2 ...
+ 
+ $ 学历认证          : Factor w/ 2 levels "成功认证","未成功认证": 2 2 1 2 1 2 2 2 2 1 ...
+ 
+ $ 征信认证          : Factor w/ 2 levels "成功认证","未成功认证": 2 2 2 2 2 2 2 2 2 2 ...
+ 
+ $ 淘宝认证          : Factor w/ 2 levels "成功认证","未成功认证": 2 2 2 2 2 2 2 2 2 2 ...
+ 
+ $ 历史成功借款次数  : int  3 1 0 3 0 0 2 1 2 1 ...
+ 
+ $历史成功借款金额  : num  12058 5000 0 13008 0 ...
+ 
+ $ 总待还本金        : num  6610 3850 0 5907 0 ...
+ 
+ $ 历史正常还款期数  : int  14 3 0 16 0 0 12 3 4 4 ...
+ 
+ $ 历史逾期还款期数  : int  0 0 0 0 0 0 1 1 0 0 ...
+ 
+ $ periods           : num  6 8 7 12 12 12 12 12 6 12 ...
+ 
+ $ repay_principle   : num  2390 2000 7500 2093 3500 ...
+ 
+ $ repay_interest    : num  141 198 633 258 471 ...
+ 
+ $ residual_principle: num  0 0 0 1612 643 ...
+ 
+ $ residual_interest : num  0 0 0 151.3 19.3 ...
+
+### 你的数据集内感兴趣的主要特性有哪些？
+1.拍拍贷的借款人特征：年龄、单笔借款金额、借款期限、年龄、性别、认证方式、历史借款情况
+
+2.贷款业务发展趋势：贷款笔数、逾期情况（逾期金额/借款金额）
+
+
+### 你认为数据集内哪些其他特征可以帮助你探索兴趣特点？
+贷款的初始评级，即个人的初始信用评级
+
+### 根据数据集内已有变量，你是否创建了任何新变量？
+创建了如下变项：
+1.通过认证了的渠道数（all.auth)
+
+2.status:是否在该数据时间段内出现还款延期的情况
+
+### 在已经探究的特性中，是否存在任何异常分布？你是否对数据进行一些操作，如清洁、调整或改变数据的形式？如果是，你为什么会这样做？
+存在异常分布的3个变项为：借款金额、历史成功借款次数和历史成功借款金额；在制作图表的时候，
+按照分布在99%范围的数据进行显示，避免对大多数情况下的展示有影响；但原始数据不做调整
+
+单变项发现的基本特征：
+
+1）超过50%的贷款在2000元-5000元的区间内，最低100元/单，最高50万元/单
+
+2）贷款期数主要集中在6个月和12个月，其它期数的分布较少，最短1个月，最长12个月
+
+3）75%的贷款利率在年化20%及以上（主要为18%、20%和22%），最低6.5%，最该24%
+
+4）2015年1月1日至2017年1月30日，成功标量快速提高，从起始的单日100单以下到最高3200单左右/天
+
+5）初始评级为C和D的标占总体为81.13%
+
+6）普通、APP闪电和其它贷款的占比为：35.95%、34.11%和29.61%
+
+7）非首标占比总体73.38%, 非首标是首标的2.76倍，即大多数情况下为老客户
+
+8）17-33岁的借款数占比总体75%，最大年龄借款为56岁
+
+9）标的男女比例为2：1
+
+10）手机认证和学历认证的覆盖面明显高于其它认证渠道，与大学生群体可能有交集
+
+11）75%的标的顾客有至少1次成功借款经历
+
+12）凡有历史成功借款金额平均金额为11,973元，中位数（金额）为7,473元
+
+13）期间在所有的贷款中，71%存在不同程度的逾期，29%正常还款。
+
+# 双变量绘图选择
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df.lc$age.bucket <- cut(df.lc$年龄, c(16,26,36,46,56))
+age_groups <- group_by(df.lc, age.bucket)
+df.lc_by_age <- summarise(age_groups,
+          amount_mean = mean(借款金额),
+          amount_median = median(借款金额),
+          n = n())
+df.lc_by_age
+ggplot(aes(x= age.bucket, y= 借款金额, fill = I('#F79420')), data= df.lc) + geom_boxplot()+
+  scale_y_continuous(limits = c(0,10000), breaks = seq(0,10000,1000))
+cor.test(df.lc$年龄, df.lc$借款金额, method = 'spearman') 
+```
+
+双变项分析：1）按照年龄组的增长，平均借款金额逐渐提高
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x = 是否首标 , y= 借款金额, fill = I('#F79420')), data= df.lc) + geom_boxplot()+
+  scale_y_continuous(limits = c(0,6000), breaks = seq(0,6000,1000))
+```
+
+双变项分析：2）首标的平均借款金额高于非首标的借款金额
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df.lc_by_rank
+ggplot(aes(x= 初始评级 , y= 借款金额), data= df.lc) + geom_boxplot(fill = I('#FF0000'))+
+  scale_y_continuous(limits = c(0,10000), breaks = seq(0,10000,1000))
+ 
+```
+
+双变项分析：3）借款金额随着初始评级的降低（A-E），借款金额逐步升高，F级借款金额下降（根据中位数判断）
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x= 初始评级 , y= 借款利率), data= df.lc) + geom_boxplot()+
+  ylim(quantile(df.lc$借款利率, 0.025), quantile(df.lc$借款利率, 0.975))
+```
+
+双变项分析：4）借款金额随着初始评级的降低（A-E），借款利率随之升高，而在F级借款利率下降
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x= 借款类型 , y= 借款金额), data= df.lc) + geom_boxplot()+
+  ylim(0, quantile(df.lc$借款金额, 0.99))
+```
+
+双变项分析：5）借款金额由小到大，一般分布为APP闪电、其他、普通和电商
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df.lc_new <- subset(df.lc,df.lc$历史成功借款金额>0)
+ggplot(aes(x= 历史成功借款金额  , y= 借款金额), data= df.lc_new)  +  
+       geom_point(alpha = 1/100)+
+  ylim(0, quantile(df.lc_new$借款金额, 0.99))+
+  xlim(0, quantile(df.lc_new$历史成功借款金额, 0.99))+
+  geom_smooth()
+  
+cor.test(df.lc_new$历史成功借款金额, df.lc_new$借款金额, method = 'pearson')
+```
+
+双变项分析：6）在存在历史借款金额的情况下，历史成功借款金额和借款金额的相关性呈现正相关关系，相关系数：0.631
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x= 借款利率 , y= 借款金额), data= df.lc)  +  
+       geom_point()+
+  geom_smooth()
+cor.test(df.lc$借款期限, df.lc$借款金额, method = 'spearman')
+```
+
+双变项分析：7）借款金额随着借款利率的升高而下降
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x= all.auth , y= 借款金额/1000), data= df.lc)  +  
+       geom_jitter(alpha = 1/100)+
+  ylim(0, quantile(df.lc$借款金额/1000, 0.99))+
+  scale_x_continuous(breaks = seq(0,6,1))+
+  geom_smooth()
+cor.test(df.lc$all.auth, df.lc$借款金额, method = 'spearman')
+auth_groups <- group_by(df.lc, all.auth)
+df.lc_by_auth <- summarise(auth_groups,
+          amount_mean = mean(借款金额),
+          amount_median = median(借款金额),
+          n = n())
+df.lc_by_auth
+
+```
+
+双变项分析：8）在所有的验证方式总数的基础上，随着验证数的增加，借款金额增加
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df.lctrack$status <-ifelse(df.lctrack$residual_principle>0,'已逾期','正常还款')
+df_lctrack_new <- subset(df.lctrack,df.lctrack$status =='已逾期')
+
+ggplot(aes(x= 初始评级 , y= residual_principle/1000), data= df.lctrack)  +  
+       geom_boxplot()+
+  ylim(0, quantile(df.lctrack$residual_principle/1000, 0.95))
+
+  
+
+
+rank_groups <- group_by(df.lctrack, 初始评级)
+df.lc_by_rank <- summarise(rank_groups,
+          overdue_amount_ratio = sum(residual_principle)/sum(借款金额),
+          overdue_amount_mean = mean(residual_principle),
+          n = n())
+df.lc_by_rank
+```
+
+双变项分析：9）随着初始评级的下降，逾期本金金额和逾期金额占比有一定提高
+注：预期本金金额占比 = 逾期金额/借款金额
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(x= residual_principle/1000,
+      y= ..count../sum(..count..),
+      xlab = '逾期金额（单位：千）',
+      ylab = '逾期金额占比',
+      data = df.lctrack,
+      geom = 'freqpoly', color = 初始评级) +
+  scale_x_continuous(limits = c(0,10), breaks = seq(0,10,1))
+```
+
+双变项分析：10）初始评级为C和D的借款标的逾期情况明显高于其它评级，D略高于C
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x = 借款成功日期, y = residual_principle/借款金额), data= df.lctrack)+
+         geom_point(alpha=1/100)+
+  scale_y_continuous(limits = c(0,1), breaks = seq(0,1,0.1))
+  
+```
+
+双变项分析：11）2016年1月以后发行的标，逾期金额占比普遍明显增多
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+date_groups <- group_by(df.lctrack, 借款成功日期)
+df.lctrack_by_date <- summarise(date_groups,
+          residual_ratio = sum(residual_principle)/sum(借款金额),
+          amount_median = median(借款金额),
+          n = n())
+df.lctrack_by_date
+
+ggplot(aes(x = 借款成功日期, y = residual_ratio), data= df.lctrack_by_date)+
+         geom_point()+geom_smooth()
+  scale_y_continuous(limits = c(0,1), breaks = seq(0,1,0.1))
+```
+
+双变项分析：12）2016年1月之后成功借款的标的,逾期金额占比借款金额快速升高。
+
+### 探讨你在这部分探究中观察到的一些关系。这些感兴趣的特性与数据集内其他特性有什么区别？
+
+对借款金额和逾期金额感兴趣；借款金额是针对客户服务的潜在成本，逾期金额是可能不能收回的成本
+
+### 你是否观察到主要特性与其他特性之间的有趣关系？
+
+1）按照年龄组的增长，平均借款金额逐渐提高
+
+2）首标的平均借款金额高于非首标的借款金额
+
+3）借款金额随着初始评级的降低（A-E），借款金额逐步升高，F级借款金额下降（根据中位数判断）
+
+4）随着初始评级的降低（A-E），借款利率随之升高，而在F级借款利率下降
+
+5）借款金额由小到大，一般分布为APP闪电、其他、普通和电商
+
+6）在存在历史借款金额的情况下，历史成功借款金额和借款金额的相关性呈现正相关关系，相关系数：0.631
+
+7）借款金额随着借款利率的升高而下降
+
+8）在所有的验证方式总数的基础上，随着验证数的增加，借款金额增加
+
+9）随着初始评级的下降，逾期本金金额和逾期金额占比有一定提高
+
+10）初始评级为C和D的借款标的逾期情况明显高于其它评级，D略高于C
+
+11）2016年1月以后发行的标，逾期金额占比普遍明显增多
+
+12）2016年1月之后成功借款的标的,逾期金额占比借款金额（逾期率）快速升高。
+
+### 你发现最强的关系是什么
+
+最强的关系是：历史成功借款金额和借款金额的Pearson相关系数，0.631
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x = 借款成功日期, y = 借款金额/1000, color= 初始评级), data = df.lctrack) + 
+  geom_point(alpha = 1/20, size = 1, position = 'jitter') +
+  geom_smooth()+
+  scale_y_continuous(limits = c(0,10), breaks = seq(0,10,1)) +
+  scale_color_brewer(type = 'div',
+                     guide = guide_legend(title = '初始评级', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))
+```
+
+多变项分析：1）初始评级与借款金额基本没有特定关系
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x = 借款成功日期, y = residual_principle/借款金额, color= 初始评级), data = df.lctrack) + 
+  geom_point(alpha = 1/20, size = 1, position = 'jitter') +
+  geom_smooth()+
+  scale_y_continuous(limits = c(0,1), breaks = seq(0,1,0.1)) +
+  scale_color_brewer(type = 'div',
+                     guide = guide_legend(title = '初始评级', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))
+```
+
+多变项分析：2）在2016年1月前，各初始评级的逾期金额占比分布相对正常，之后初始评级失效
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x = 借款成功日期, y = 借款金额/1000, color= 是否首标), data = df.lctrack) + 
+  geom_point(alpha = 1/20, size = 1, position = 'jitter') +
+  geom_smooth()+
+  scale_y_continuous(limits = c(0,10), breaks = seq(0,10,1)) +
+  scale_color_brewer(palette="Set1",
+                     guide = guide_legend(title = '是否首标', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))
+```
+
+多变项分析：3）在2015-01到2017-01发行的标的，首标的平均借款金额逐渐超过非首标的平均借款金额
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x = 借款成功日期, y = residual_principle/借款金额, color= 是否首标), data = df.lctrack) + 
+  geom_point(alpha = 1/20, size = 1, position = 'jitter') +
+  geom_smooth()+
+  scale_y_continuous(limits = c(0,1), breaks = seq(0,1,0.1)) +
+  scale_color_brewer(type="div",
+                     guide = guide_legend(title = '是否首标', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))
+```
+
+多变项分析：4）在2015-01到2017-01发行的标的，首标的逾期金额占比始终高于非首标的逾期金额占比
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df.lctrack$all.auth <-factor(df.lctrack$all.auth)
+
+ggplot(aes(x = 借款成功日期, y = 借款金额/1000, color= all.auth), data = df.lctrack) + 
+  geom_point(alpha = 1/20, size = 1, position = 'jitter') +
+  geom_smooth()+
+  scale_y_continuous(limits = c(0,10), breaks = seq(0,10,1)) +
+  scale_color_brewer(palette="Set1",
+                     guide = guide_legend(title = '认证成功数', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))
+```
+
+多变项分析：5）在2016-01之后，未进行认证的顾客显著增加
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x = 借款成功日期, y = residual_principle/借款金额, color= all.auth), data = df.lctrack) + 
+  geom_point(alpha = 1/20, size = 1, position = 'jitter') +
+  geom_smooth()+
+  scale_y_continuous(limits = c(0,1), breaks = seq(0,1,0.1)) +
+  scale_color_brewer(palette="Set1",
+                     guide = guide_legend(title = '认证成功数', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))
+```
+
+多变项分析：6）在2016-01之后，各个认证成功数的标的均出现逾期金额占比高企的情况
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x = 借款成功日期, y = 借款金额/1000, color= 借款类型), data = df.lctrack) + 
+  geom_point(alpha = 1/20, size = 1, position = 'jitter') +
+  geom_smooth()+
+  scale_y_continuous(limits = c(0,10), breaks = seq(0,10,0.5)) +
+  scale_color_brewer(type="div",
+                     guide = guide_legend(title = '借款类型', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))
+```
+
+多变项分析：7）电商借款在2016年末不再有新的标的，而其它APP闪电、电商和其他在2016年1月后有不同程度的借款金额下降
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x = 借款成功日期, y = residual_principle/借款金额, color= 借款类型), data = df.lctrack) + 
+  geom_point(alpha = 1/20, size = 1, position = 'jitter') +
+  geom_smooth()+
+  scale_y_continuous(limits = c(0,1), breaks = seq(0,1,0.1)) +
+  scale_color_brewer(type="div",
+                     guide = guide_legend(title = '是否首标', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))
+```
+
+多变项分析：8）在2016-01之前,逾期金额占比：其他>普通>电商,2016-01之后变化剧烈
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#options(scipen= 200)
+df.lctrack_new <- subset(df.lctrack,df.lctrack$历史成功借款金额>0)
+
+ggplot(aes(x = 历史成功借款金额, y = 借款金额, color= 初始评级), data = df.lctrack_new) + 
+  geom_jitter(alpha = 1/20, size = 1, position = 'jitter') +
+  scale_x_log10()+
+  scale_y_log10()+
+  geom_smooth()
+  #scale_y_continuous(limits = c(0,1), breaks = seq(0,1,0.1)) +
+  scale_color_brewer(type="div", guide = guide_legend(title = '初始评级', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))
+
+```
+
+多变项分析：9)在历史借款金额越高，借款金额越高的基础上，B级的跨度区间最大，C级和D级标的金额和历史借款金额高度集中
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x = 历史成功借款金额, y = residual_principle/借款金额, color= 初始评级), data = df.lctrack_new) + 
+  geom_point(alpha = 1/20, size = 1, position = 'jitter') +
+  scale_x_log10()+
+  geom_smooth()+
+  scale_y_continuous(limits = c(0,1), breaks = seq(0,1,0.1)) +
+  scale_color_brewer(type="div",guide = guide_legend(title = '初始评级', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))
+```
+
+多变项分析：10）A-E初始评级的的逾期率均是先上升后下降
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x = 历史成功借款金额, y = 借款金额, color= 借款类型), data = df.lctrack_new) + 
+  geom_point(alpha = 1/20, size = 1, position = 'jitter') +
+  scale_x_log10()+
+  scale_y_log10()+
+  geom_smooth()
+  #scale_y_continuous(limits = c(0,1), breaks = seq(0,1,0.1)) +
+  scale_color_brewer(type="div",guide = guide_legend(title = '性别', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))
+
+```
+
+多变项分析：11）APP闪电贷和普通贷款分布最多，且金额集中
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x = 历史成功借款金额, y = residual_principle/借款金额, color= 借款类型), data = df.lctrack_new) + 
+  geom_point(alpha = 1/20, size = 1, position = 'jitter') +
+  scale_x_log10()+
+  geom_smooth()+
+  scale_y_continuous(limits = c(0,1), breaks = seq(0,1,0.1)) +
+  scale_color_brewer(type="div",guide = guide_legend(title = '借款类型', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))
+```
+
+多变项分析：12）APP闪电、普通和其他贷款逾期金额占比,随着历史成功借款金额增多而增多；而电商贷款是随着历史成功借款金额的增多而减少。
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df.lctrack$age.bucket <- cut(df.lctrack$年龄, c(16,26,36,46,56))
+ggplot(aes(x = 历史成功借款金额, y = 借款金额, color= age.bucket), data = df.lctrack) + 
+  geom_point(alpha = 1/20, size = 1, position = 'jitter') +
+  geom_smooth()+
+  scale_x_log10()+
+  scale_y_log10()+
+  #scale_y_continuous(limits = c(0,1), breaks = seq(0,1,0.1)) +
+  scale_color_brewer(type="div",guide = guide_legend(title = '年龄分组', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))
+```
+
+多变项分析：13）两个年龄层次是2015-01至2017-01时间范围内占到标的的主体，(16，26]和(26,36],其中16-26为大学生群体
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x = 历史成功借款金额, y = residual_principle/借款金额, color= age.bucket), data = df.lctrack) + 
+  geom_point(alpha = 1/20, size = 1, position = 'jitter') +
+  geom_smooth()+
+  scale_x_log10()+
+  scale_y_continuous(limits = c(0,1), breaks = seq(0,1,0.1)) +
+  scale_color_brewer(type = 'div',guide = guide_legend(title = '性别', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))
+```
+
+多变项分析：14）各年龄层次是2015-01至2017-01时间范均随着历史成功借款金额增大，逾期率下降；历史借款金额低于1000元情况下，（16，26]年龄组逾期率最低
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x = 借款利率, y = 借款金额, color= 是否首标), data = df.lctrack) + 
+  geom_point(alpha = 1/20, size = 1, position = 'jitter') +
+  scale_y_log10() +
+  geom_smooth()+
+  scale_color_brewer(type = 'div',
+                     guide = guide_legend(title = '是否首标', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))
+```
+
+多变项分析：15）作为首标的借款金额均会与低于10万元，且普遍利率要低于非首标的情况
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x = 借款利率, y = residual_principle/借款金额, color= 是否首标), data = df.lctrack) + 
+  geom_point(alpha = 1/20, size = 1, position = 'jitter') +
+  scale_y_continuous(limits = c(0,1), breaks = seq(0,1,0.1)) +
+  geom_smooth()+
+  scale_color_brewer(type = 'div',
+                     guide = guide_legend(title = '是否首标', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))
+```
+
+多变项分析：16）大部分情况下首次标的的逾期金额占比借款金额要低于非首标的情况
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x = 借款利率, y = 借款金额, color= age.bucket), data = df.lctrack) + 
+  geom_point(alpha = 1/20, size = 1, position = 'jitter') +
+  scale_y_log10()+
+  geom_smooth()+
+  scale_color_brewer(type = 'div',
+                     guide = guide_legend(title = '认证成功数', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x = 借款利率, y = residual_principle/借款金额, color= age.bucket), data = df.lctrack) + 
+  geom_point(alpha = 1/20, size = 1, position = 'jitter') +
+  scale_y_continuous(limits = c(0,1), breaks = seq(0,1,0.1)) +
+  geom_smooth()+
+  scale_color_brewer(type = 'div',
+                     guide = guide_legend(title = '认证成功数', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x = 借款利率, y = residual_principle/借款金额, color = 是否首标), data = df.lctrack) + 
+  geom_point(alpha = 1/20, size = 1, position = 'jitter') +
+  scale_y_continuous(limits = c(0,1), breaks = seq(0,1,0.1)) +
+  scale_x_continuous(limits = c(10,25),breaks = seq(10,25,1))+
+  geom_smooth()+
+  scale_color_brewer(type = 'div',
+                     guide = guide_legend(title = '认证成功数', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))
+
+cor.test(df.lc$年龄, df.lc$借款金额, method = 'spearman')
+```
+
+
+
+
+# 多变量绘图选择
+
+
+
+# 多变量分析
+
+###  探讨你在这部分探究中观察到的一些关系。通过观察感兴趣的特性，是否存在相互促进的特性？
+
+与借款金额相关的因子：1.历史成功借款金额 2.是否首标 3.认证成功数 4.贷款类别 5.年龄层次 6.利率
+
+与逾期金额/借款金额相关的因子：1.日期 2.认证成功数 3.历史成功借款金额 4.初始评级 5.是否首标 6.年龄层次 7.利率
+
+### 这些特性之间是否存在有趣或惊人的联系呢？
+
+1）初始评级与借款金额基本没有特定关系
+
+2）在2016年1月前，各初始评级的逾期金额占比分布相对正常，之后初始评级失效
+
+3）在2015-01到2017-01发行的标的，首标的平均借款金额逐渐超过非首标的平均借款金额
+
+4）首标的逾期金额占比始终高于非首标的逾期金额占比
+
+5）在2016-01之后，未进行认证的顾客显著增加
+
+6）在2016-01之后，各个认证成功数的标的均出现逾期金额占比高企的情况
+
+7)在历史借款金额越高，借款金额越高的基础上，B级的跨度区间最大，C级和D级标的金额和历史借款金额高度集中
+
+8）在2016-01之前,逾期金额占比：其他>普通>电商,2016-01之后变化剧烈
+
+9)在历史借款金额越高，借款金额越高的基础上，B级的跨度区间最大，C级和D级标的金额和历史借款金额高度集中
+
+10）A-E初始评级的的逾期率均是先上升后下降
+
+11）APP闪电贷和普通贷款分布最多，且金额集中
+
+12）APP闪电、普通和其他贷款逾期金额占比,随着历史成功借款金额增多而增多；而电商贷款是随着历史成功借款金额的增多而减少
+
+13）两个年龄层次是2015-01至2017-01时间范围内占到标的的主体，(16，26]和(26,36],其中16-26为大学生群体
+
+14）各年龄层次是2015-01至2017-01时间范均随着历史成功借款金额增大，逾期率下降；历史借款金额低于1000元情况下，（16，26]年龄组逾期率最低
+
+15）作为首标的借款金额均会与低于10万元，且普遍利率要低于非首标的情况
+
+16）大部分情况下首次标的的逾期金额占比借款金额要低于非首标的情况
+
+### 选项：你是否创建过数据集的任何模型？讨论你模型的优缺点。
+没有创建数据集模型
+```
+
+------
+
+# 定稿图与总结
+```{r}
+
+### 绘图一
+```{r echo=FALSE, Plot_One}
+df.lctrack$year<-format(as.Date(df.lctrack$借款成功日期),'%y')
+df.lctrack$month<-format(as.Date(df.lctrack$借款成功日期),'%m')
+df.lctrack$yearmonth<-format(as.Date(df.lctrack$借款成功日期),'%y%m')
+
+
+p1<- ggplot(aes(x=yearmonth,y= 借款金额/10000,fill= 借款类型) ,data=df.lctrack,xlab=('借款日期'),
+          ylab=('借款金额'))+
+  geom_histogram(stat = 'identity')+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ggtitle('不同借款类型借款金额分布')
+
+
+p2<- ggplot(aes(x=yearmonth,y= 借款金额/10000,fill= 初始评级) ,data=df.lctrack,xlab=('借款日期'),
+          ylab=('借款金额'))+
+  geom_histogram(stat = 'identity')+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ggtitle('不同初始评级借款金额分布')
+
+p3<- ggplot(aes(x=yearmonth,y= 借款金额/10000,fill= 是否首标) ,data=df.lctrack,xlab=('借款日期'),
+          ylab=('借款金额'))+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  geom_histogram(stat = 'identity')+
+  ggtitle('是否首标借款金额分布')
+
+p4<- ggplot(aes(x=yearmonth,y= 借款金额/10000,fill= status) ,data=df.lctrack,xlab=('借款日期'),
+          ylab=('借款金额'))+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  geom_histogram(stat = 'identity')+
+  ggtitle('是否逾期借款金额分布')
+
+
+grid.arrange(p1,p2,ncol=1)
+grid.arrange(p3,p4,ncol=1)
+```
+
+### 描述一
+
+1.2015-01到2017-01发行成功的标的，各类借款类型均出现快速增长，其中2016年3月开始APP闪电贷快速发展，2016年11月开始电商借款消失
+
+2.2015-01到2017-01发行成功的标的，各类初始评级贷款快速增长，其中C级和D级始终占据主体
+
+3.2016-04之后，非首标贷款标的明显高于首标标的
+
+4.2016-02以及之后发行成功的标的，逾期金额增长迅速
+
+### 绘图二
+```{r echo=FALSE, Plot_Two}
+options(scipen= 200)
+df.lctrack_new <- subset(df.lctrack, df.lctrack$借款成功日期< as.Date("2016/1/31"))
+
+f1<- ggplot(aes(x = 历史成功借款金额, y = 借款金额, color= 初始评级), data = df.lctrack_new) + 
+  geom_point(alpha = 1/5, size = 1, position = 'jitter') +
+  scale_x_log10()+
+  scale_y_log10()+
+  scale_color_brewer(type = 'div',guide = guide_legend(title = '初始评级', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))+
+  ggtitle('2016年1月前不同初始评级借款金额分布')
+
+df.lctrack_new1 <- subset(df.lctrack, df.lctrack$借款成功日期> as.Date("2016/1/31"))
+f2<- ggplot(aes(x = 历史成功借款金额, y = 借款金额, color= 初始评级), data = df.lctrack_new1) + 
+  geom_point(alpha = 1/5, size = 1, position = 'jitter') +
+  scale_x_log10()+
+  scale_y_log10()+
+  scale_color_brewer(type = 'div',guide = guide_legend(title = '初始评级', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))+
+  ggtitle('2016年1月后不同初始评级借款金额分布')
+
+grid.arrange(f1,f2,ncol=1)
+```
+
+### 描述二
+
+1)对比2016年2月之前成功发行的标的与之后发行的标的；历史成功借款金额继续与借款金额呈现正相关性
+
+2)各初始评级分布基本前后一致，说明初始评级的标准未发生变化，且此标准与历史成功借款金额基本无关
+
+### 绘图三
+```{r echo=FALSE, Plot_Three}
+g1<- ggplot(aes(x = 历史成功借款金额, y = residual_principle/借款金额, color= 初始评级), data = df.lctrack_new) + 
+  geom_point(alpha = 1, size = 1, position = 'jitter') +
+  geom_smooth()+
+  scale_x_log10()+
+  scale_y_continuous(limits = c(0,1), breaks = seq(0,1,0.1)) +
+  scale_color_brewer(type = 'div',guide = guide_legend(title = '初始评级', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))+
+  ggtitle('2016年1月前不同初始评级逾期金额占比')
+
+g2<- ggplot(aes(x = 历史成功借款金额, y = residual_principle/借款金额, color= 初始评级), data = df.lctrack_new1) + 
+  geom_point(alpha = 1, size = 1, position = 'jitter') +
+  geom_smooth()+
+  scale_x_log10()+
+  scale_y_continuous(limits = c(0,1), breaks = seq(0,1,0.1)) +
+  scale_color_brewer(type = 'div',guide = guide_legend(title = '初始评级', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2)))+
+  ggtitle('2016年1月后不同初始评级逾期金额占比')
+grid.arrange(g1,g2,ncol=1)
+```
+
+### 描述三
+1)对比2016年2月之前成功发行的标的与之后发行的标的；历史成功借款金额继续与逾期金额占比借款金额呈现先上升后下降关系
+
+2)根据数据推论出初始评级/信用评级在2016年2月开始发行的标的出现失效的状态，这可能与行业环境以及特殊借款群体有关
+（例如大学生毕业后换手机号了，不再进行贷款偿还等情况）
+
+# 反思
+
+一、分析过程中遇到的难点
+
+1.数据导入过程中，含有中文字符的CSV文件导入
+
+2.原始数据中包含多组数据，难以短时间内理解各字段的含义和联系
+
+3.从单变量分析到双变量分析，再到多变量分析；无法快速找到研究重点字段对象
+
+二、分析过程中成功的发现部分
+
+1.历史成功借款金额与借款金额的高度相关性
+
+2.2016年1月之前和之后逾期金额占比的巨大变化
+
+3.各种不同贷款类型在不同时间段的分布情况变化
+
+4.各种不同初始评级贷款不同时间段的分布情况变化
+
+三、未来如何进一步丰富分析内容和提高报告质量，以下为可以提升的几点需进行进一步研究
+
+1.该数据仅仅是拍拍贷的样本数据，并不能代表整体情况，
+
+2.对于标的的评级，没有建立该信用评级的依据说明
+
+3.缺乏个人相关数据，无法直接获得个体正常还款和逾期的数据
+
+4.一般针对还款行为，一般要区分还款意愿和还款能力，这两点没有数据支撑
