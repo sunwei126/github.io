@@ -44,7 +44,7 @@ There are three components of this project:
 
 ### 2.1. ETL Pipeline
 
-File _data/process_data.py_ contains data cleaning pipeline that:
+File _data/etl_pipelien.py_ contains data cleaning pipeline that:
 
 - Loads the `messages` and `categories` dataset
 - Merges the two datasets
@@ -55,7 +55,7 @@ File _data/process_data.py_ contains data cleaning pipeline that:
 
 ### 2.2. ML Pipeline
 
-File _models/train_classifier.py_ contains machine learning pipeline that:
+File _models/train.py_ contains machine learning pipeline that:
 
 - Loads data from the **SQLite database**
 - Splits the data into training and testing sets
