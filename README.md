@@ -95,7 +95,7 @@ There are three steps to get up and runnning with the web app if you want to sta
 **Go to the project directory** and the run the following command:
 
 ```bat
-python data/process_data.py data/disaster_messages.csv data/disaster_categories.csv data/DisasterResponse.db
+python data/etl_pipeline.py data/disaster_messages.csv data/disaster_categories.csv data/DisasterResponse.db
 ```
 
 The first two arguments are input data and the third argument is the SQLite Database in which we want to save the cleaned data. The ETL pipeline is in _process_data.py_.
@@ -113,7 +113,7 @@ _DisasterResponse.db_ already exists in _data_ folder but the above command will
 After the data cleaning process, run this command **from the project directory**:
 
 ```bat
-python models/train_classifier.py data/DisasterResponse.db models/classifier.pkl
+python models/train.py data/DisasterResponse.db models/classifier.pkl
 ```
 
 This will use cleaned data to train the model, improve the model with grid search and saved the model to a pickle file (_classifer.pkl_).
