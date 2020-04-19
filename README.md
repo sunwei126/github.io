@@ -175,10 +175,10 @@ As we can see the data is highly imbalanced.
 │   ├── DisasterResponse.db-----------# DATABASE TO SAVE CLEANED DATA TO
 │   ├── disaster_categories.csv-------# DATA TO PROCESS
 │   ├── disaster_messages.csv---------# DATA TO PROCESS
-│   └── process_data.py---------------# PERFORMS ETL PROCESS
+│   └── etl_pipeline.py---------------# PERFORMS ETL PROCESS
 ├── images-------------------------------# PLOTS FOR USE IN README AND THE WEB APP
 ├── models
-│   └── train_classifier.py-----------# PERFORMS CLASSIFICATION TASK
+│   └── train.py-----------# PERFORMS CLASSIFICATION TASK
     └── classifier.pkl-----------# SAVED MODEL
 - README.md
 
